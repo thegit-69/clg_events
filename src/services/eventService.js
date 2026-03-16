@@ -10,6 +10,7 @@ import {
   orderBy,
   where,
   serverTimestamp,
+  limit,
 } from 'firebase/firestore'
 import { db } from './firebase'
 
@@ -69,6 +70,23 @@ export const registerForEvent = async (eventId, userData) => {
     attended: false,
   })
   return docRef.id
+}
+
+export const checkUserAttendance = async (eventId, userId) => {
+  try {
+    const q = query(
+      collection(db, REGISTRATIONS_COLLECTION),
+      where('eventId', '==', eventId),
+      where('uid', '==', userId),
+      limit(1)
+    )
+    const snapshot = await getDocs(q)
+    if (snapshot.empty) return false
+    return snapshot.docs[0].data().attended || false
+  } catch (error) {
+    console.error('Error checking attendance:', error)
+    return false
+  }
 }
 
 export const fetchRegistrations = async (eventId) => {

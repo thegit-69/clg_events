@@ -13,6 +13,7 @@ import {
 } from 'react-icons/io5'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
+import CertificateDownload from '../components/ui/CertificateDownload'
 import useEventStore from '../store/eventStore'
 import useAuthStore from '../store/authStore'
 import { formatDateLong, formatDateTime } from '../utils/helpers'
@@ -240,6 +241,19 @@ export default function EventDetail() {
                   </Link>
                 </div>
               </motion.div>
+            )}
+
+            {/* Certificate Section */}
+            {isAuthenticated && (
+              <div className="mt-8 pt-6 border-t border-dark-100">
+                <CertificateDownload
+                  studentName={user?.displayName || 'Student'}
+                  eventName={event.title}
+                  eventDate={event.startDate}
+                  userId={user?.uid}
+                  eventId={event.id}
+                />
+              </div>
             )}
           </div>
         </motion.div>

@@ -41,7 +41,6 @@ export const THEME_TAGS = [
 export const NAV_LINKS = [
   { label: 'Home', path: '/' },
   { label: 'Events', path: '/events' },
-  { label: 'About', path: '/about' },
 ]
 
 export const DASHBOARD_LINKS = [
