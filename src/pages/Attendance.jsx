@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
-import { Html5Qrcode } from 'html5-qrcode'
 import { motion } from 'framer-motion'
 import {
   IoScanOutline,
@@ -17,6 +16,8 @@ import {
 } from '../services/eventService'
 import toast from 'react-hot-toast'
 
+const SCAN_COOLDOWN_MS = 3000
+
 export default function Attendance() {
   const { id } = useParams()
   const { events } = useEventStore()
@@ -27,9 +28,17 @@ export default function Attendance() {
   const [lastScanned, setLastScanned] = useState(null)
   const scannerRef = useRef(null)
   const html5QrCodeRef = useRef(null)
+  const attendeesRef = useRef([])
+  const scannerStartingRef = useRef(false)
+  const lastScannedCodeRef = useRef(null)
+  const lastScannedTimeRef = useRef(0)
 
   const event = events.find((e) => e.id === id)
   const attendedCount = attendees.filter((a) => a.attended).length
+
+  useEffect(() => {
+    attendeesRef.current = attendees
+  }, [attendees])
 
   // Load registrations from Firestore
   useEffect(() => {
@@ -58,9 +67,10 @@ export default function Attendance() {
     loadRegistrations()
   }, [id])
 
-  // Mark a registration as attended
+  // Mark a registration as attended — uses functional state to avoid stale closures
   const handleMarkAttendance = useCallback(async (registrationId) => {
-    const attendee = attendees.find((a) => a.id === registrationId)
+    const attendee = attendeesRef.current.find((a) => a.id === registrationId)
+
     if (!attendee) {
       toast.error('Participant not found')
       return
@@ -84,14 +94,21 @@ export default function Attendance() {
       console.error('Mark attendance error:', error)
       toast.error('Failed to mark attendance')
     }
-  }, [attendees])
+  }, [])
 
-  // Process a scanned QR value
+  // Ref-based callback so the scanner always invokes the latest version
+  const handleMarkAttendanceRef = useRef(handleMarkAttendance)
+  useEffect(() => {
+    handleMarkAttendanceRef.current = handleMarkAttendance
+  }, [handleMarkAttendance])
+
+  // Process a scanned QR value (stable — uses ref)
   const processQrResult = useCallback((decodedText) => {
-    // QR contains the registration ID directly, or a URL like campusevents://reg/{regId}
-    let regId = decodedText.trim()
+    if (typeof decodedText !== 'string') return
 
-    // Extract ID from URL format if present
+    let regId = decodedText.trim()
+    if (!regId) return
+
     if (regId.includes('reg/')) {
       regId = regId.split('reg/').pop()
     }
@@ -99,35 +116,85 @@ export default function Attendance() {
       regId = regId.split('registration/').pop()
     }
 
-    handleMarkAttendance(regId)
-  }, [handleMarkAttendance])
+    handleMarkAttendanceRef.current(regId)
+  }, [])
 
-  // Start camera scanner
+  // Start camera scanner — dynamically imports html5-qrcode to prevent page crash
   const startScanner = async () => {
-    if (!scannerRef.current) return
+    if (!scannerRef.current || scanning || scannerStartingRef.current) return
+    scannerStartingRef.current = true
 
     try {
+      const { Html5Qrcode } = await import('html5-qrcode')
+
+      if (html5QrCodeRef.current) {
+        await stopScanner()
+      }
+
       const html5QrCode = new Html5Qrcode('qr-reader')
       html5QrCodeRef.current = html5QrCode
 
-      await html5QrCode.start(
-        { facingMode: 'environment' },
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-          aspectRatio: 1.0,
-        },
-        (decodedText) => {
-          processQrResult(decodedText)
-        },
-        () => {
-          // Ignore scan failures (no QR in frame)
+      const qrConfig = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0,
+      }
+
+      const onSuccess = (decodedText) => {
+        const now = Date.now()
+        if (typeof decodedText !== 'string') return
+
+        if (
+          decodedText === lastScannedCodeRef.current &&
+          now - lastScannedTimeRef.current < SCAN_COOLDOWN_MS
+        ) {
+          return
         }
-      )
+        lastScannedCodeRef.current = decodedText
+        lastScannedTimeRef.current = now
+        processQrResult(decodedText)
+      }
+
+      const onFailure = () => { }
+
+      // Try environment camera (mobile back), then user camera, then first available
+      let started = false
+      for (const config of [
+        { facingMode: 'environment' },
+        { facingMode: 'user' },
+      ]) {
+        try {
+          await html5QrCode.start(config, qrConfig, onSuccess, onFailure)
+          started = true
+          break
+        } catch {
+          // try next config
+        }
+      }
+
+      if (!started) {
+        const cameras = await Html5Qrcode.getCameras()
+        if (cameras && cameras.length > 0) {
+          await html5QrCode.start(cameras[0].id, qrConfig, onSuccess, onFailure)
+        } else {
+          throw new Error('No cameras found')
+        }
+      }
+
       setScanning(true)
     } catch (error) {
       console.error('Scanner start error:', error)
       toast.error('Could not access camera. Check permissions or use manual entry.')
+      if (html5QrCodeRef.current) {
+        try {
+          await html5QrCodeRef.current.clear()
+        } catch {
+          // ignore
+        }
+        html5QrCodeRef.current = null
+      }
+    } finally {
+      scannerStartingRef.current = false
     }
   }
 
@@ -136,7 +203,7 @@ export default function Attendance() {
     if (html5QrCodeRef.current) {
       try {
         await html5QrCodeRef.current.stop()
-        html5QrCodeRef.current.clear()
+        await html5QrCodeRef.current.clear()
       } catch (e) {
         // ignore
       }
@@ -201,24 +268,21 @@ export default function Attendance() {
           <div
             ref={scannerRef}
             className="relative w-full max-w-sm mx-auto mb-6"
+            style={{ minHeight: '280px' }}
           >
-            <div
-              id="qr-reader"
-              className="w-full rounded-xl overflow-hidden"
-              style={{ minHeight: scanning ? 'auto' : '280px' }}
-            >
-              {!scanning && (
-                <div className="w-full h-[280px] bg-dark-100 rounded-xl flex items-center justify-center border-2 border-dashed border-dark-300">
-                  <div className="text-center">
-                    <IoVideocamOutline className="text-4xl text-dark-400 mx-auto mb-2" />
-                    <p className="text-sm text-dark-400">Camera is off</p>
-                    <p className="text-xs text-dark-300 mt-1">
-                      Click "Start Scanner" to begin
-                    </p>
-                  </div>
+            <div id="qr-reader" className="w-full rounded-xl overflow-hidden" />
+
+            {!scanning && (
+              <div className="absolute inset-0 w-full h-full bg-dark-100 rounded-xl flex items-center justify-center border-2 border-dashed border-dark-300">
+                <div className="text-center">
+                  <IoVideocamOutline className="text-4xl text-dark-400 mx-auto mb-2" />
+                  <p className="text-sm text-dark-400">Camera is off</p>
+                  <p className="text-xs text-dark-300 mt-1">
+                    Click "Start Scanner" to begin
+                  </p>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Scanner controls */}
