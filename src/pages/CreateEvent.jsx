@@ -4,14 +4,17 @@ import { useForm } from 'react-hook-form'
 import { motion } from 'framer-motion'
 import Button from '../components/ui/Button'
 import useEventStore from '../store/eventStore'
+import useAuthStore from '../store/authStore'
 import { EVENT_TYPES, EVENT_MODE, THEME_TAGS } from '../utils/constants'
-import { generateId } from '../utils/helpers'
+import { createEvent as createEventInFirestore } from '../services/eventService'
 import toast from 'react-hot-toast'
 
 export default function CreateEvent() {
   const navigate = useNavigate()
   const { addEvent } = useEventStore()
+  const { user } = useAuthStore()
   const [selectedTags, setSelectedTags] = useState([])
+  const [submitting, setSubmitting] = useState(false)
 
   const {
     register,
@@ -25,22 +28,31 @@ export default function CreateEvent() {
     )
   }
 
-  const onSubmit = (data) => {
-    const newEvent = {
-      id: generateId(),
-      ...data,
-      tags: selectedTags,
-      status: 'UPCOMING',
-      registeredCount: 0,
-      participantAvatars: [],
-      banner: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&h=400&fit=crop',
-      organizer: 'My Organization',
-      organizerId: 'user1',
-      createdAt: new Date().toISOString(),
+  const onSubmit = async (data) => {
+    setSubmitting(true)
+    try {
+      const eventData = {
+        ...data,
+        tags: selectedTags,
+        status: 'UPCOMING',
+        registeredCount: 0,
+        participantAvatars: [],
+        banner: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&h=400&fit=crop',
+        organizer: user?.displayName || 'My Organization',
+        organizerId: user?.uid || 'anonymous',
+        maxParticipants: data.maxParticipants || 100,
+      }
+
+      const id = await createEventInFirestore(eventData)
+      addEvent({ id, ...eventData, createdAt: new Date().toISOString() })
+      toast.success('Event created successfully!')
+      navigate('/dashboard/events')
+    } catch (error) {
+      console.error('Create event error:', error)
+      toast.error('Failed to create event. Please try again.')
+    } finally {
+      setSubmitting(false)
     }
-    addEvent(newEvent)
-    toast.success('Event created successfully!')
-    navigate('/dashboard/events')
   }
 
   const inputClass =
@@ -207,8 +219,8 @@ export default function CreateEvent() {
 
         {/* Submit */}
         <div className="flex gap-3">
-          <Button type="submit" size="lg">
-            Create Event
+          <Button type="submit" size="lg" disabled={submitting}>
+            {submitting ? 'Creating...' : 'Create Event'}
           </Button>
           <Button
             type="button"

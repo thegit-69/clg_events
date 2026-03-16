@@ -55,9 +55,18 @@ export default function Navbar() {
                     </Button>
                   </Link>
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-sm">
-                      {user?.displayName?.charAt(0) || 'U'}
-                    </div>
+                    {user?.photoURL ? (
+                      <img
+                        src={user.photoURL}
+                        alt={user.displayName}
+                        className="w-8 h-8 rounded-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-sm">
+                        {user?.displayName?.charAt(0) || 'U'}
+                      </div>
+                    )}
                     <button
                       onClick={logout}
                       className="text-sm text-dark-500 hover:text-dark-700"

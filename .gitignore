@@ -9,9 +9,11 @@ build/
 .vite/
 .cache/
 
-# Environment files
+# Environment files (contain secrets)
 .env
+.env.local
 .env.*.local
+.env.production
 
 # Logs
 npm-debug.log*
@@ -27,4 +29,8 @@ Thumbs.db
 
 # Coverage
 coverage/
+
+# Temp scaffolding scripts
+create_dirs.bat
+create_dirs.js
 

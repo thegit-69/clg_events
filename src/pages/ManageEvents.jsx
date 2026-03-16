@@ -5,14 +5,18 @@ import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import useEventStore from '../store/eventStore'
 import { formatDate } from '../utils/helpers'
+import { deleteEvent as deleteEventFromFirestore } from '../services/eventService'
 import toast from 'react-hot-toast'
 
 export default function ManageEvents() {
   const navigate = useNavigate()
   const { events, deleteEvent } = useEventStore()
 
-  const handleDelete = (id, title) => {
+  const handleDelete = async (id, title) => {
     if (window.confirm(`Delete "${title}"?`)) {
+      try {
+        await deleteEventFromFirestore(id)
+      } catch (e) { /* non-critical if Firestore fails */ }
       deleteEvent(id)
       toast.success('Event deleted')
     }

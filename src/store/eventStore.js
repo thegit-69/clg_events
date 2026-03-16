@@ -1,6 +1,23 @@
 import { create } from 'zustand'
 import { MOCK_EVENTS } from '../utils/mockData'
 
+// Normalize Firestore Timestamp fields to ISO strings
+const normalizeEvent = (event) => ({
+  ...event,
+  createdAt: event.createdAt?.toDate
+    ? event.createdAt.toDate().toISOString()
+    : event.createdAt,
+  startDate: event.startDate?.toDate
+    ? event.startDate.toDate().toISOString()
+    : event.startDate,
+  endDate: event.endDate?.toDate
+    ? event.endDate.toDate().toISOString()
+    : event.endDate,
+  registrationDeadline: event.registrationDeadline?.toDate
+    ? event.registrationDeadline.toDate().toISOString()
+    : event.registrationDeadline,
+})
+
 const useEventStore = create((set, get) => ({
   events: MOCK_EVENTS,
   filteredEvents: MOCK_EVENTS,
@@ -9,7 +26,10 @@ const useEventStore = create((set, get) => ({
   activeTab: 'all',
   activeFilter: 'all',
 
-  setEvents: (events) => set({ events, filteredEvents: events }),
+  setEvents: (events) => {
+    const normalized = events.map(normalizeEvent)
+    set({ events: normalized, filteredEvents: normalized })
+  },
 
   setSelectedEvent: (event) => set({ selectedEvent: event }),
 

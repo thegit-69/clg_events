@@ -3,27 +3,40 @@ import { FcGoogle } from 'react-icons/fc'
 import Modal from './ui/Modal'
 import Button from './ui/Button'
 import useAuthStore from '../store/authStore'
-import { MOCK_USER } from '../utils/mockData'
+import { signInWithGoogle } from '../services/authService'
 import toast from 'react-hot-toast'
 
 export default function AuthModal({ isOpen, onClose }) {
   const [isSignUp, setIsSignUp] = useState(true)
   const [email, setEmail] = useState('')
+  const [loading, setLoading] = useState(false)
   const { setUser } = useAuthStore()
 
-  const handleGoogleSignIn = () => {
-    // Mock sign-in for now — replace with real Firebase auth later
-    setUser(MOCK_USER)
-    toast.success('Signed in successfully!')
-    onClose()
+  const handleGoogleSignIn = async () => {
+    setLoading(true)
+    try {
+      const user = await signInWithGoogle()
+      setUser({
+        uid: user.uid,
+        displayName: user.displayName,
+        email: user.email,
+        photoURL: user.photoURL,
+        role: 'organizer',
+      })
+      toast.success('Signed in successfully!')
+      onClose()
+    } catch (error) {
+      toast.error(error.message || 'Sign in failed')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleEmailSubmit = (e) => {
     e.preventDefault()
     if (!email) return
-    setUser({ ...MOCK_USER, email })
-    toast.success('Signed in successfully!')
-    onClose()
+    // Email auth can be added later; for now prompt Google
+    toast('Please use Google sign-in for now', { icon: 'ℹ️' })
   }
 
   return (
@@ -79,12 +92,14 @@ export default function AuthModal({ isOpen, onClose }) {
       <div className="space-y-3">
         <button
           onClick={handleGoogleSignIn}
+          disabled={loading}
           className="w-full flex items-center justify-center gap-3 px-4 py-3
                      border-2 border-dark-200 rounded-xl text-dark-700 font-medium
-                     hover:bg-dark-50 transition-colors duration-200"
+                     hover:bg-dark-50 transition-colors duration-200
+                     disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <FcGoogle size={20} />
-          Continue with Google
+          {loading ? 'Signing in...' : 'Continue with Google'}
         </button>
       </div>
 

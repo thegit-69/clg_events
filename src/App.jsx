@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import Layout from './components/layout/Layout'
@@ -11,8 +12,49 @@ import CreateEvent from './pages/CreateEvent'
 import Attendance from './pages/Attendance'
 import Notifications from './pages/Notifications'
 import NotFound from './pages/NotFound'
+import useAuthStore from './store/authStore'
+import useEventStore from './store/eventStore'
+import { onAuthChange } from './services/authService'
+import { fetchEvents } from './services/eventService'
 
 function App() {
+  const { setUser, setLoading } = useAuthStore()
+  const { setEvents } = useEventStore()
+
+  // Listen for Firebase auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthChange((firebaseUser) => {
+      if (firebaseUser) {
+        setUser({
+          uid: firebaseUser.uid,
+          displayName: firebaseUser.displayName,
+          email: firebaseUser.email,
+          photoURL: firebaseUser.photoURL,
+          role: 'organizer',
+        })
+      } else {
+        setUser(null)
+      }
+    })
+    return () => unsubscribe()
+  }, [setUser, setLoading])
+
+  // Load events from Firestore on mount
+  useEffect(() => {
+    const loadEvents = async () => {
+      try {
+        const events = await fetchEvents()
+        if (events.length > 0) {
+          setEvents(events)
+        }
+        // If Firestore is empty, keep mock data as fallback
+      } catch (error) {
+        console.warn('Using mock data — Firestore fetch failed:', error.message)
+      }
+    }
+    loadEvents()
+  }, [setEvents])
+
   return (
     <BrowserRouter>
       <Toaster position="top-right" />

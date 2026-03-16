@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -13,13 +14,15 @@ import Button from '../components/ui/Button'
 import useEventStore from '../store/eventStore'
 import useAuthStore from '../store/authStore'
 import { formatDateLong, formatDateTime } from '../utils/helpers'
+import { registerForEvent, updateEvent as updateEventInFirestore } from '../services/eventService'
 import toast from 'react-hot-toast'
 
 export default function EventDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { events } = useEventStore()
-  const { isAuthenticated } = useAuthStore()
+  const { events, updateEvent } = useEventStore()
+  const { user, isAuthenticated } = useAuthStore()
+  const [registering, setRegistering] = useState(false)
 
   const event = events.find((e) => e.id === id)
 
@@ -35,12 +38,31 @@ export default function EventDetail() {
   const spotsLeft = event.maxParticipants - event.registeredCount
   const progress = (event.registeredCount / event.maxParticipants) * 100
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!isAuthenticated) {
       toast.error('Please sign in to register')
       return
     }
-    toast.success(`Registered for ${event.title}!`)
+    setRegistering(true)
+    try {
+      await registerForEvent(event.id, {
+        uid: user.uid,
+        displayName: user.displayName,
+        email: user.email,
+      })
+      const newCount = (event.registeredCount || 0) + 1
+      // Update in Firestore (best effort)
+      try {
+        await updateEventInFirestore(event.id, { registeredCount: newCount })
+      } catch (e) { /* non-critical */ }
+      updateEvent(event.id, { registeredCount: newCount })
+      toast.success(`Registered for ${event.title}!`)
+    } catch (error) {
+      console.error('Registration error:', error)
+      toast.error('Registration failed. Please try again.')
+    } finally {
+      setRegistering(false)
+    }
   }
 
   const handleShare = () => {
@@ -169,8 +191,8 @@ export default function EventDetail() {
                   Registration deadline: <span className="font-semibold text-dark-700">{formatDateTime(event.registrationDeadline)}</span>
                 </p>
               </div>
-              <Button size="lg" onClick={handleRegister}>
-                Register Now
+              <Button size="lg" onClick={handleRegister} disabled={registering}>
+                {registering ? 'Registering...' : 'Register Now'}
               </Button>
             </div>
           </div>

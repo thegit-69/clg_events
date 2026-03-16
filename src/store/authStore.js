@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { logOut } from '../services/authService'
 
 const useAuthStore = create((set) => ({
   user: null,
@@ -14,12 +15,18 @@ const useAuthStore = create((set) => ({
 
   setLoading: (loading) => set({ loading }),
 
-  logout: () =>
+  logout: async () => {
+    try {
+      await logOut()
+    } catch (error) {
+      console.error('Logout error:', error)
+    }
     set({
       user: null,
       isAuthenticated: false,
       loading: false,
-    }),
+    })
+  },
 }))
 
 export default useAuthStore
