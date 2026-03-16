@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useState } from 'react'
-import { IoMenuOutline, IoCloseOutline } from 'react-icons/io5'
+import { IoMenuOutline, IoCloseOutline, IoTicketOutline } from 'react-icons/io5'
 import { HiOutlineAcademicCap } from 'react-icons/hi2'
 import Button from '../ui/Button'
 import useAuthStore from '../../store/authStore'
@@ -49,6 +49,11 @@ export default function Navbar() {
             <div className="hidden md:flex items-center gap-3">
               {isAuthenticated ? (
                 <>
+                  <Link to="/my-tickets">
+                    <Button variant="ghost" size="sm" icon={<IoTicketOutline />}>
+                      My Tickets
+                    </Button>
+                  </Link>
                   <Link to="/dashboard">
                     <Button variant="outline" size="sm">
                       Dashboard
@@ -123,6 +128,13 @@ export default function Navbar() {
                 ))}
                 {isAuthenticated ? (
                   <>
+                    <Link
+                      to="/my-tickets"
+                      onClick={() => setMobileMenu(false)}
+                      className="text-sm font-medium text-dark-600 hover:text-dark-900 py-2 flex items-center gap-2"
+                    >
+                      <IoTicketOutline /> My Tickets
+                    </Link>
                     <Link
                       to="/dashboard"
                       onClick={() => setMobileMenu(false)}

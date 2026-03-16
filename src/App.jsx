@@ -11,6 +11,7 @@ import ManageEvents from './pages/ManageEvents'
 import CreateEvent from './pages/CreateEvent'
 import Attendance from './pages/Attendance'
 import Notifications from './pages/Notifications'
+import MyTickets from './pages/MyTickets'
 import NotFound from './pages/NotFound'
 import useAuthStore from './store/authStore'
 import useEventStore from './store/eventStore'
@@ -64,6 +65,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/events" element={<Events />} />
           <Route path="/events/:id" element={<EventDetail />} />
+          <Route path="/my-tickets" element={<MyTickets />} />
           <Route path="*" element={<NotFound />} />
         </Route>
 

@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { QRCodeSVG } from 'qrcode.react'
 import {
   IoCalendarOutline,
   IoLocationOutline,
@@ -8,6 +9,7 @@ import {
   IoTimeOutline,
   IoArrowBack,
   IoShareSocialOutline,
+  IoTicketOutline,
 } from 'react-icons/io5'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
@@ -23,6 +25,7 @@ export default function EventDetail() {
   const { events, updateEvent } = useEventStore()
   const { user, isAuthenticated } = useAuthStore()
   const [registering, setRegistering] = useState(false)
+  const [registrationId, setRegistrationId] = useState(null)
 
   const event = events.find((e) => e.id === id)
 
@@ -45,11 +48,12 @@ export default function EventDetail() {
     }
     setRegistering(true)
     try {
-      await registerForEvent(event.id, {
+      const regId = await registerForEvent(event.id, {
         uid: user.uid,
         displayName: user.displayName,
         email: user.email,
       })
+      setRegistrationId(regId)
       const newCount = (event.registeredCount || 0) + 1
       // Update in Firestore (best effort)
       try {
@@ -191,10 +195,52 @@ export default function EventDetail() {
                   Registration deadline: <span className="font-semibold text-dark-700">{formatDateTime(event.registrationDeadline)}</span>
                 </p>
               </div>
-              <Button size="lg" onClick={handleRegister} disabled={registering}>
-                {registering ? 'Registering...' : 'Register Now'}
-              </Button>
+              {registrationId ? (
+                <Link to="/my-tickets">
+                  <Button size="lg" variant="secondary" icon={<IoTicketOutline />}>
+                    View My Ticket
+                  </Button>
+                </Link>
+              ) : (
+                <Button size="lg" onClick={handleRegister} disabled={registering}>
+                  {registering ? 'Registering...' : 'Register Now'}
+                </Button>
+              )}
             </div>
+
+            {/* QR Ticket — shown after registration */}
+            {registrationId && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-6 border-t border-dark-100 pt-6"
+              >
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6 text-center">
+                  <IoTicketOutline className="text-3xl text-emerald-600 mx-auto mb-2" />
+                  <h3 className="text-lg font-bold text-emerald-800 mb-1">
+                    You're registered!
+                  </h3>
+                  <p className="text-sm text-emerald-600 mb-4">
+                    Show this QR code to the organizer for attendance check-in
+                  </p>
+                  <div className="inline-block p-4 bg-white rounded-xl border border-emerald-200">
+                    <QRCodeSVG
+                      value={registrationId}
+                      size={180}
+                      level="H"
+                      includeMargin={true}
+                    />
+                  </div>
+                  <p className="text-[10px] text-dark-400 font-mono mt-2">{registrationId}</p>
+                  <Link
+                    to="/my-tickets"
+                    className="inline-block mt-4 text-sm text-primary-500 font-medium hover:underline"
+                  >
+                    View all my tickets →
+                  </Link>
+                </div>
+              </motion.div>
+            )}
           </div>
         </motion.div>
       </div>

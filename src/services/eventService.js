@@ -18,9 +18,19 @@ const REGISTRATIONS_COLLECTION = 'registrations'
 
 // Events
 export const fetchEvents = async () => {
-  const q = query(collection(db, EVENTS_COLLECTION), orderBy('createdAt', 'desc'))
-  const snapshot = await getDocs(q)
-  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+  try {
+    const q = query(collection(db, EVENTS_COLLECTION), orderBy('createdAt', 'desc'))
+    const snapshot = await getDocs(q)
+    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+  } catch (error) {
+    // Fallback if index isn't ready
+    if (error.code === 'failed-precondition') {
+      console.warn('Index missing — fetching events without order.')
+      const snapshot = await getDocs(collection(db, EVENTS_COLLECTION))
+      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    }
+    throw error
+  }
 }
 
 export const fetchEventById = async (id) => {
@@ -62,16 +72,53 @@ export const registerForEvent = async (eventId, userData) => {
 }
 
 export const fetchRegistrations = async (eventId) => {
-  const q = query(
-    collection(db, REGISTRATIONS_COLLECTION),
-    where('eventId', '==', eventId),
-    orderBy('registeredAt', 'desc')
-  )
-  const snapshot = await getDocs(q)
-  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+  try {
+    // Try with ordering (requires composite index)
+    const q = query(
+      collection(db, REGISTRATIONS_COLLECTION),
+      where('eventId', '==', eventId),
+      orderBy('registeredAt', 'desc')
+    )
+    const snapshot = await getDocs(q)
+    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+  } catch (error) {
+    // Fallback without ordering if composite index doesn't exist yet
+    if (error.code === 'failed-precondition') {
+      console.warn('Composite index missing — fetching without order. Check Firestore console for index link.')
+      const q = query(
+        collection(db, REGISTRATIONS_COLLECTION),
+        where('eventId', '==', eventId)
+      )
+      const snapshot = await getDocs(q)
+      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    }
+    throw error
+  }
 }
 
 export const markAttendance = async (registrationId) => {
   const docRef = doc(db, REGISTRATIONS_COLLECTION, registrationId)
   await updateDoc(docRef, { attended: true, attendedAt: serverTimestamp() })
+}
+
+export const fetchUserRegistrations = async (uid) => {
+  try {
+    const q = query(
+      collection(db, REGISTRATIONS_COLLECTION),
+      where('uid', '==', uid),
+      orderBy('registeredAt', 'desc')
+    )
+    const snapshot = await getDocs(q)
+    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
+  } catch (error) {
+    if (error.code === 'failed-precondition') {
+      const q = query(
+        collection(db, REGISTRATIONS_COLLECTION),
+        where('uid', '==', uid)
+      )
+      const snapshot = await getDocs(q)
+      return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
+    }
+    throw error
+  }
 }

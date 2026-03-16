@@ -1,38 +1,179 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
-import { QRCodeSVG } from 'qrcode.react'
+import { Html5Qrcode } from 'html5-qrcode'
 import { motion } from 'framer-motion'
-import { IoQrCodeOutline, IoScanOutline, IoCheckmarkCircle } from 'react-icons/io5'
+import {
+  IoScanOutline,
+  IoCheckmarkCircle,
+  IoVideocamOutline,
+  IoVideocamOffOutline,
+  IoSearchOutline,
+} from 'react-icons/io5'
 import Button from '../components/ui/Button'
 import useEventStore from '../store/eventStore'
+import {
+  fetchRegistrations,
+  markAttendance as markAttendanceInFirestore,
+} from '../services/eventService'
 import toast from 'react-hot-toast'
 
 export default function Attendance() {
   const { id } = useParams()
   const { events } = useEventStore()
-  const [mode, setMode] = useState('generate') // 'generate' | 'scan'
-  const [scannedId, setScannedId] = useState('')
-  const [attendees, setAttendees] = useState([
-    { id: '1', name: 'Alice Johnson', email: 'alice@srm.edu.in', attended: true, time: '09:15 AM' },
-    { id: '2', name: 'Bob Smith', email: 'bob@srm.edu.in', attended: true, time: '09:22 AM' },
-    { id: '3', name: 'Charlie Brown', email: 'charlie@srm.edu.in', attended: false, time: null },
-    { id: '4', name: 'Diana Prince', email: 'diana@srm.edu.in', attended: true, time: '09:30 AM' },
-    { id: '5', name: 'Ethan Hunt', email: 'ethan@srm.edu.in', attended: false, time: null },
-  ])
+  const [attendees, setAttendees] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [scanning, setScanning] = useState(false)
+  const [manualId, setManualId] = useState('')
+  const [lastScanned, setLastScanned] = useState(null)
+  const scannerRef = useRef(null)
+  const html5QrCodeRef = useRef(null)
 
   const event = events.find((e) => e.id === id)
-  const qrValue = `campusevents://attendance/${id}`
   const attendedCount = attendees.filter((a) => a.attended).length
 
-  const handleManualMark = (attendeeId) => {
-    setAttendees((prev) =>
-      prev.map((a) =>
-        a.id === attendeeId
-          ? { ...a, attended: true, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
-          : a
+  // Load registrations from Firestore
+  useEffect(() => {
+    const loadRegistrations = async () => {
+      setLoading(true)
+      try {
+        const regs = await fetchRegistrations(id)
+        const mapped = regs.map((r) => ({
+          id: r.id,
+          name: r.displayName || r.name || 'Unknown',
+          email: r.email || '',
+          uid: r.uid || '',
+          attended: r.attended || false,
+          time: r.attendedAt?.toDate
+            ? r.attendedAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : r.attended ? 'Marked' : null,
+        }))
+        setAttendees(mapped)
+      } catch (error) {
+        console.error('Failed to load registrations:', error)
+        toast.error('Failed to load attendees')
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadRegistrations()
+  }, [id])
+
+  // Mark a registration as attended
+  const handleMarkAttendance = useCallback(async (registrationId) => {
+    const attendee = attendees.find((a) => a.id === registrationId)
+    if (!attendee) {
+      toast.error('Participant not found')
+      return
+    }
+    if (attendee.attended) {
+      toast('Already checked in', { icon: 'ℹ️' })
+      return
+    }
+
+    try {
+      await markAttendanceInFirestore(registrationId)
+      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      setAttendees((prev) =>
+        prev.map((a) =>
+          a.id === registrationId ? { ...a, attended: true, time: now } : a
+        )
       )
+      setLastScanned({ name: attendee.name, time: now })
+      toast.success(`✓ ${attendee.name} checked in!`)
+    } catch (error) {
+      console.error('Mark attendance error:', error)
+      toast.error('Failed to mark attendance')
+    }
+  }, [attendees])
+
+  // Process a scanned QR value
+  const processQrResult = useCallback((decodedText) => {
+    // QR contains the registration ID directly, or a URL like campusevents://reg/{regId}
+    let regId = decodedText.trim()
+
+    // Extract ID from URL format if present
+    if (regId.includes('reg/')) {
+      regId = regId.split('reg/').pop()
+    }
+    if (regId.includes('registration/')) {
+      regId = regId.split('registration/').pop()
+    }
+
+    handleMarkAttendance(regId)
+  }, [handleMarkAttendance])
+
+  // Start camera scanner
+  const startScanner = async () => {
+    if (!scannerRef.current) return
+
+    try {
+      const html5QrCode = new Html5Qrcode('qr-reader')
+      html5QrCodeRef.current = html5QrCode
+
+      await html5QrCode.start(
+        { facingMode: 'environment' },
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0,
+        },
+        (decodedText) => {
+          processQrResult(decodedText)
+        },
+        () => {
+          // Ignore scan failures (no QR in frame)
+        }
+      )
+      setScanning(true)
+    } catch (error) {
+      console.error('Scanner start error:', error)
+      toast.error('Could not access camera. Check permissions or use manual entry.')
+    }
+  }
+
+  // Stop camera scanner
+  const stopScanner = async () => {
+    if (html5QrCodeRef.current) {
+      try {
+        await html5QrCodeRef.current.stop()
+        html5QrCodeRef.current.clear()
+      } catch (e) {
+        // ignore
+      }
+      html5QrCodeRef.current = null
+    }
+    setScanning(false)
+  }
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (html5QrCodeRef.current) {
+        html5QrCodeRef.current.stop().catch(() => { })
+      }
+    }
+  }, [])
+
+  // Manual entry handler
+  const handleManualEntry = () => {
+    const trimmed = manualId.trim()
+    if (!trimmed) return
+
+    // Try matching by registration ID, email, or name
+    const match = attendees.find(
+      (a) =>
+        a.id === trimmed ||
+        a.email.toLowerCase() === trimmed.toLowerCase() ||
+        a.uid === trimmed
     )
-    toast.success('Attendance marked!')
+
+    if (match) {
+      handleMarkAttendance(match.id)
+    } else {
+      // Try as raw Firestore registration ID
+      handleMarkAttendance(trimmed)
+    }
+    setManualId('')
   }
 
   return (
@@ -44,87 +185,98 @@ export default function Attendance() {
         </p>
       </div>
 
-      {/* Mode Toggle */}
-      <div className="flex gap-3 mb-8">
-        <Button
-          variant={mode === 'generate' ? 'primary' : 'outline'}
-          icon={<IoQrCodeOutline />}
-          onClick={() => setMode('generate')}
-        >
-          QR Code
-        </Button>
-        <Button
-          variant={mode === 'scan' ? 'primary' : 'outline'}
-          icon={<IoScanOutline />}
-          onClick={() => setMode('scan')}
-        >
-          Scanner
-        </Button>
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* QR Section */}
+        {/* Scanner Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-2xl border border-dark-200 p-8 text-center"
+          className="bg-white rounded-2xl border border-dark-200 p-6"
         >
-          {mode === 'generate' ? (
-            <>
-              <h3 className="text-lg font-bold text-dark-900 mb-4">Event QR Code</h3>
-              <p className="text-sm text-dark-500 mb-6">
-                Participants scan this code to mark their attendance
-              </p>
-              <div className="inline-block p-6 bg-white border-2 border-dark-200 rounded-2xl">
-                <QRCodeSVG
-                  value={qrValue}
-                  size={200}
-                  level="H"
-                  includeMargin={true}
-                />
-              </div>
-              <p className="text-xs text-dark-400 mt-4 font-mono">{qrValue}</p>
-            </>
-          ) : (
-            <>
-              <h3 className="text-lg font-bold text-dark-900 mb-4">Scan QR Code</h3>
-              <p className="text-sm text-dark-500 mb-6">
-                Point the camera at a participant's QR code
-              </p>
-              <div className="w-64 h-64 mx-auto bg-dark-100 rounded-2xl flex items-center justify-center border-2 border-dashed border-dark-300">
-                <div className="text-center">
-                  <IoScanOutline className="text-4xl text-dark-400 mx-auto mb-2" />
-                  <p className="text-sm text-dark-400">Camera preview</p>
-                  <p className="text-xs text-dark-300 mt-1">
-                    (Requires HTTPS in production)
-                  </p>
+          <h3 className="text-lg font-bold text-dark-900 mb-2">Scan QR Code</h3>
+          <p className="text-sm text-dark-500 mb-6">
+            Point the camera at a participant's QR code to mark attendance
+          </p>
+
+          {/* Camera viewport */}
+          <div
+            ref={scannerRef}
+            className="relative w-full max-w-sm mx-auto mb-6"
+          >
+            <div
+              id="qr-reader"
+              className="w-full rounded-xl overflow-hidden"
+              style={{ minHeight: scanning ? 'auto' : '280px' }}
+            >
+              {!scanning && (
+                <div className="w-full h-[280px] bg-dark-100 rounded-xl flex items-center justify-center border-2 border-dashed border-dark-300">
+                  <div className="text-center">
+                    <IoVideocamOutline className="text-4xl text-dark-400 mx-auto mb-2" />
+                    <p className="text-sm text-dark-400">Camera is off</p>
+                    <p className="text-xs text-dark-300 mt-1">
+                      Click "Start Scanner" to begin
+                    </p>
+                  </div>
                 </div>
-              </div>
-              {/* Manual entry */}
-              <div className="mt-6">
+              )}
+            </div>
+          </div>
+
+          {/* Scanner controls */}
+          <div className="flex justify-center gap-3 mb-6">
+            {!scanning ? (
+              <Button
+                icon={<IoVideocamOutline />}
+                onClick={startScanner}
+              >
+                Start Scanner
+              </Button>
+            ) : (
+              <Button
+                variant="danger"
+                icon={<IoVideocamOffOutline />}
+                onClick={stopScanner}
+              >
+                Stop Scanner
+              </Button>
+            )}
+          </div>
+
+          {/* Last scanned feedback */}
+          {lastScanned && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-6 text-center">
+              <IoCheckmarkCircle className="text-emerald-500 text-2xl mx-auto mb-1" />
+              <p className="text-sm font-semibold text-emerald-700">
+                {lastScanned.name}
+              </p>
+              <p className="text-xs text-emerald-600">
+                Checked in at {lastScanned.time}
+              </p>
+            </div>
+          )}
+
+          {/* Manual entry */}
+          <div className="border-t border-dark-100 pt-6">
+            <p className="text-sm font-semibold text-dark-700 mb-3">
+              Manual Check-in
+            </p>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <IoSearchOutline className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-400" />
                 <input
                   type="text"
-                  value={scannedId}
-                  onChange={(e) => setScannedId(e.target.value)}
-                  placeholder="Or enter registration ID manually"
-                  className="w-full px-4 py-3 border-2 border-dark-200 rounded-xl text-sm
-                             focus:outline-none focus:border-primary-500"
+                  value={manualId}
+                  onChange={(e) => setManualId(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleManualEntry()}
+                  placeholder="Registration ID or email"
+                  className="w-full pl-10 pr-4 py-3 border-2 border-dark-200 rounded-xl text-sm
+                             focus:outline-none focus:border-primary-500 transition-colors"
                 />
-                <Button
-                  className="mt-3"
-                  size="sm"
-                  onClick={() => {
-                    if (scannedId) {
-                      toast.success(`Attendance marked for ID: ${scannedId}`)
-                      setScannedId('')
-                    }
-                  }}
-                >
-                  Mark Attendance
-                </Button>
               </div>
-            </>
-          )}
+              <Button size="md" onClick={handleManualEntry}>
+                Mark
+              </Button>
+            </div>
+          </div>
         </motion.div>
 
         {/* Attendee List */}
@@ -139,52 +291,72 @@ export default function Attendance() {
             <p className="text-sm text-dark-400">
               {attendedCount} of {attendees.length} checked in
             </p>
+            {/* Progress bar */}
+            {attendees.length > 0 && (
+              <div className="w-full bg-dark-100 rounded-full h-2 mt-3">
+                <div
+                  className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${(attendedCount / attendees.length) * 100}%` }}
+                />
+              </div>
+            )}
           </div>
-          <div className="divide-y divide-dark-100">
-            {attendees.map((attendee) => (
-              <div
-                key={attendee.id}
-                className="px-6 py-4 flex items-center justify-between"
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold
-                      ${attendee.attended
-                        ? 'bg-emerald-100 text-emerald-600'
-                        : 'bg-dark-100 text-dark-400'
-                      }`}
-                  >
+
+          {loading ? (
+            <div className="p-10 text-center">
+              <p className="text-dark-400 text-sm">Loading attendees...</p>
+            </div>
+          ) : attendees.length === 0 ? (
+            <div className="p-10 text-center">
+              <p className="text-dark-400 text-sm">No registrations yet</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-dark-100 max-h-[500px] overflow-y-auto">
+              {attendees.map((attendee) => (
+                <div
+                  key={attendee.id}
+                  className="px-6 py-4 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold
+                        ${attendee.attended
+                          ? 'bg-emerald-100 text-emerald-600'
+                          : 'bg-dark-100 text-dark-400'
+                        }`}
+                    >
+                      {attendee.attended ? (
+                        <IoCheckmarkCircle />
+                      ) : (
+                        attendee.name.charAt(0)
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-dark-900">
+                        {attendee.name}
+                      </p>
+                      <p className="text-xs text-dark-400">{attendee.email}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
                     {attendee.attended ? (
-                      <IoCheckmarkCircle />
+                      <span className="text-xs text-emerald-600 font-medium">
+                        ✓ {attendee.time}
+                      </span>
                     ) : (
-                      attendee.name.charAt(0)
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleMarkAttendance(attendee.id)}
+                      >
+                        Mark
+                      </Button>
                     )}
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-dark-900">
-                      {attendee.name}
-                    </p>
-                    <p className="text-xs text-dark-400">{attendee.email}</p>
-                  </div>
                 </div>
-                <div className="text-right">
-                  {attendee.attended ? (
-                    <span className="text-xs text-emerald-600 font-medium">
-                      ✓ {attendee.time}
-                    </span>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleManualMark(attendee.id)}
-                    >
-                      Mark
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </motion.div>
       </div>
     </div>

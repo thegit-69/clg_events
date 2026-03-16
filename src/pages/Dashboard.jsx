@@ -61,7 +61,7 @@ export default function Dashboard() {
           <h2 className="text-lg font-bold text-dark-900">Recent Events</h2>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[600px]">
             <thead>
               <tr className="bg-dark-50">
                 <th className="text-left px-6 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wider">
