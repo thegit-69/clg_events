@@ -87,14 +87,8 @@ export default function Navbar() {
                     size="sm"
                     onClick={() => setAuthModal(true)}
                   >
-                    Join CampusEvents
-                  </Button>
-                  <button
-                    onClick={() => setAuthModal(true)}
-                    className="text-sm font-medium text-dark-600 hover:text-dark-900"
-                  >
                     Sign in
-                  </button>
+                  </Button>
                 </>
               )}
             </div>

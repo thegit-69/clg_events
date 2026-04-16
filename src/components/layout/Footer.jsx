@@ -50,17 +50,12 @@ export default function Footer() {
           {/* Contact */}
           <div>
             <h4 className="text-white font-semibold text-sm mb-4 uppercase tracking-wider">
-              Connect
+              Contact us
             </h4>
             <ul className="space-y-2">
               <li>
-                <a href="#" className="text-sm text-dark-400 hover:text-white transition-colors flex items-center gap-2">
-                  <IoLogoGithub /> GitHub
-                </a>
-              </li>
-              <li>
                 <span className="text-sm text-dark-400">
-                  contact@campusevents.io
+                  <a href="mailto:cdasarath2006@gmail.com">cdasarath2006@gmail.com</a>
                 </span>
               </li>
             </ul>
@@ -69,7 +64,7 @@ export default function Footer() {
 
         <div className="border-t border-dark-700 mt-10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-dark-500">
-            © 2026 CampusEvents. Built for SRM Hackathon.
+            © 2026 Team Kalki 
           </p>
           <p className="text-xs text-dark-500">
             Made with ❤️ for college communities

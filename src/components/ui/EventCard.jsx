@@ -15,6 +15,7 @@ export default function EventCard({ event }) {
       whileHover={{ y: -4 }}
       transition={{ duration: 0.2 }}
       className="bg-white border border-dark-200 rounded-xl overflow-hidden hover:shadow-lg transition-shadow duration-300"
+      onClick={() => navigate(`/events/${event.id}`)}
     >
       {/* Banner */}
       <div className="relative h-44 overflow-hidden">
