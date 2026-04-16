@@ -16,6 +16,15 @@ export const EVENT_STATUS = {
   COMPLETED: 'COMPLETED',
 }
 
+export const APPROVAL_STATUS = {
+  PENDING: 'pending',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+}
+
+export const SUPER_ADMIN_EMAIL =
+  import.meta.env.VITE_SUPER_ADMIN_EMAIL || '[Insert Your Email Here]'
+
 export const EVENT_MODE = {
   OFFLINE: 'OFFLINE',
   ONLINE: 'ONLINE',
@@ -36,6 +45,13 @@ export const THEME_TAGS = [
   'HealthTech',
   'FinTech',
   'No Restrictions',
+  'Music',
+  'Dance',
+  'Art & Design',
+  'Photography',
+  'Theatre',
+  'Literature',
+  'Fashion'
 ]
 
 export const NAV_LINKS = [

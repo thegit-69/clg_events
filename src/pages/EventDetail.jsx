@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { QRCodeSVG } from 'qrcode.react'
@@ -17,23 +17,89 @@ import CertificateDownload from '../components/ui/CertificateDownload'
 import useEventStore from '../store/eventStore'
 import useAuthStore from '../store/authStore'
 import { formatDateLong, formatDateTime } from '../utils/helpers'
-import { registerForEvent, updateEvent as updateEventInFirestore } from '../services/eventService'
+import {
+  fetchEventById,
+  fetchUserEventRegistration,
+  registerForEvent,
+  updateEvent as updateEventInFirestore,
+} from '../services/eventService'
+import { APPROVAL_STATUS } from '../utils/constants'
 import toast from 'react-hot-toast'
 
 export default function EventDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { events, updateEvent } = useEventStore()
-  const { user, isAuthenticated } = useAuthStore()
+  const { user, isAuthenticated, isSuperAdmin } = useAuthStore()
+  const [event, setEvent] = useState(null)
+  const [loadingEvent, setLoadingEvent] = useState(true)
   const [registering, setRegistering] = useState(false)
   const [registrationId, setRegistrationId] = useState(null)
+  const [isAttended, setIsAttended] = useState(false)
+  const [loadingReg, setLoadingReg] = useState(true)
 
-  const event = events.find((e) => e.id === id)
+  useEffect(() => {
+    const loadEvent = async () => {
+      setLoadingEvent(true)
+      try {
+        const fromStore = events.find((e) => e.id === id)
+        if (fromStore) {
+          setEvent(fromStore)
+        }
 
-  if (!event) {
+        const fromFirestore = await fetchEventById(id)
+        setEvent(fromFirestore || fromStore || null)
+      } catch (error) {
+        console.error('Failed to load event:', error)
+        setEvent(null)
+      } finally {
+        setLoadingEvent(false)
+      }
+    }
+
+    loadEvent()
+  }, [id, events])
+
+  useEffect(() => {
+    const checkRegistration = async () => {
+      if (!isAuthenticated || !user?.uid || !id) {
+        setLoadingReg(false)
+        return
+      }
+      try {
+        const reg = await fetchUserEventRegistration(id, user.uid)
+        if (reg) {
+          setRegistrationId(reg.id)
+          setIsAttended(reg.attended || false)
+        }
+      } catch (error) {
+        console.error('Failed to check registration:', error)
+      } finally {
+        setLoadingReg(false)
+      }
+    }
+    checkRegistration()
+  }, [id, user?.uid, isAuthenticated])
+
+  const ownerUid = event?.createdBy || event?.organizerId
+  const canViewUnapproved =
+    isAuthenticated && (ownerUid === user?.uid || isSuperAdmin)
+  const isApproved = event?.approvalStatus === APPROVAL_STATUS.APPROVED
+  const canViewEvent = !!event && (isApproved || canViewUnapproved)
+  const canRegisterForEvent = isApproved
+
+  if (loadingEvent) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-20 text-center">
-        <h2 className="text-2xl font-bold text-dark-900 mb-4">Event not found</h2>
+        <p className="text-dark-400">Loading event...</p>
+      </div>
+    )
+  }
+
+  if (!canViewEvent) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-20 text-center">
+        <h2 className="text-2xl font-bold text-dark-900 mb-4">Event not available</h2>
         <Button onClick={() => navigate('/events')}>Browse Events</Button>
       </div>
     )
@@ -43,17 +109,31 @@ export default function EventDetail() {
   const progress = (event.registeredCount / event.maxParticipants) * 100
 
   const handleRegister = async () => {
+    if (!canRegisterForEvent) {
+      toast.error('You can register only after this event is approved')
+      return
+    }
+
     if (!isAuthenticated) {
       toast.error('Please sign in to register')
       return
     }
+
+    if (!user?.uid) {
+      toast.error('Could not verify your account. Please sign in again.')
+      return
+    }
+
     setRegistering(true)
     try {
-      const regId = await registerForEvent(event.id, {
-        uid: user.uid,
-        displayName: user.displayName,
-        email: user.email,
-      })
+      // Re-validate against Firestore to match security rules exactly.
+      const latestEvent = await fetchEventById(event.id)
+      if (!latestEvent || latestEvent.approvalStatus !== APPROVAL_STATUS.APPROVED) {
+        toast.error('This event is not approved for registration yet')
+        return
+      }
+
+      const regId = await registerForEvent(event.id, user)
       setRegistrationId(regId)
       const newCount = (event.registeredCount || 0) + 1
       // Update in Firestore (best effort)
@@ -61,6 +141,7 @@ export default function EventDetail() {
         await updateEventInFirestore(event.id, { registeredCount: newCount })
       } catch (e) { /* non-critical */ }
       updateEvent(event.id, { registeredCount: newCount })
+      setEvent(prev => ({ ...prev, registeredCount: newCount }))
       toast.success(`Registered for ${event.title}!`)
     } catch (error) {
       console.error('Registration error:', error)
@@ -195,15 +276,27 @@ export default function EventDetail() {
                 <p className="text-sm text-dark-500">
                   Registration deadline: <span className="font-semibold text-dark-700">{formatDateTime(event.registrationDeadline)}</span>
                 </p>
+                {!isApproved && canViewUnapproved && (
+                  <p className="text-xs text-amber-600 mt-2">
+                    This event is {event.approvalStatus}. Public registration is disabled.
+                  </p>
+                )}
               </div>
-              {registrationId ? (
-                <Link to="/my-tickets">
-                  <Button size="lg" variant="secondary" icon={<IoTicketOutline />}>
-                    View My Ticket
-                  </Button>
-                </Link>
+              {loadingReg ? (
+                <Button size="lg" disabled>Loading...</Button>
+              ) : registrationId ? (
+                <div className="flex items-center gap-3">
+                  <Badge color={isAttended ? 'green' : 'blue'}>
+                    {isAttended ? 'Attendance Marked (Completed)' : 'Registered / Applied'}
+                  </Badge>
+                  <Link to="/my-tickets">
+                    <Button size="lg" variant="secondary" icon={<IoTicketOutline />}>
+                      View My Ticket
+                    </Button>
+                  </Link>
+                </div>
               ) : (
-                <Button size="lg" onClick={handleRegister} disabled={registering}>
+                <Button size="lg" onClick={handleRegister} disabled={registering || !canRegisterForEvent}>
                   {registering ? 'Registering...' : 'Register Now'}
                 </Button>
               )}

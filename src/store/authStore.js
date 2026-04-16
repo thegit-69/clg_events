@@ -5,11 +5,13 @@ const useAuthStore = create((set) => ({
   user: null,
   loading: true,
   isAuthenticated: false,
+  isSuperAdmin: false,
 
   setUser: (user) =>
     set({
       user,
       isAuthenticated: !!user,
+      isSuperAdmin: user?.role === 'super-admin',
       loading: false,
     }),
 
@@ -24,6 +26,7 @@ const useAuthStore = create((set) => ({
     set({
       user: null,
       isAuthenticated: false,
+      isSuperAdmin: false,
       loading: false,
     })
   },

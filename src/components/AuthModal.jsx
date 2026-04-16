@@ -3,7 +3,7 @@ import { FcGoogle } from 'react-icons/fc'
 import Modal from './ui/Modal'
 import Button from './ui/Button'
 import useAuthStore from '../store/authStore'
-import { signInWithGoogle } from '../services/authService'
+import { getUserRole, signInWithGoogle } from '../services/authService'
 import toast from 'react-hot-toast'
 
 export default function AuthModal({ isOpen, onClose }) {
@@ -21,7 +21,7 @@ export default function AuthModal({ isOpen, onClose }) {
         displayName: user.displayName,
         email: user.email,
         photoURL: user.photoURL,
-        role: 'organizer',
+        role: getUserRole(user.email),
       })
       toast.success('Signed in successfully!')
       onClose()

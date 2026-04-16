@@ -13,10 +13,11 @@ import Attendance from './pages/Attendance'
 import Notifications from './pages/Notifications'
 import MyTickets from './pages/MyTickets'
 import NotFound from './pages/NotFound'
+import AdminReview from './pages/AdminReview'
 import useAuthStore from './store/authStore'
 import useEventStore from './store/eventStore'
-import { onAuthChange } from './services/authService'
-import { fetchEvents } from './services/eventService'
+import { getUserRole, onAuthChange } from './services/authService'
+import { fetchApprovedEvents } from './services/eventService'
 
 function App() {
   const { setUser, setLoading } = useAuthStore()
@@ -31,7 +32,7 @@ function App() {
           displayName: firebaseUser.displayName,
           email: firebaseUser.email,
           photoURL: firebaseUser.photoURL,
-          role: 'organizer',
+          role: getUserRole(firebaseUser.email),
         })
       } else {
         setUser(null)
@@ -44,13 +45,11 @@ function App() {
   useEffect(() => {
     const loadEvents = async () => {
       try {
-        const events = await fetchEvents()
-        if (events.length > 0) {
-          setEvents(events)
-        }
-        // If Firestore is empty, keep mock data as fallback
+        const events = await fetchApprovedEvents()
+        setEvents(events)
       } catch (error) {
-        console.warn('Using mock data — Firestore fetch failed:', error.message)
+        console.warn('Approved events fetch failed:', error.message)
+        setEvents([])
       }
     }
     loadEvents()
@@ -76,6 +75,7 @@ function App() {
           <Route path="create" element={<CreateEvent />} />
           <Route path="events/:id/attendance" element={<Attendance />} />
           <Route path="notifications" element={<Notifications />} />
+          <Route path="admin/review" element={<AdminReview />} />
         </Route>
       </Routes>
     </BrowserRouter>

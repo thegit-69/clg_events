@@ -13,27 +13,39 @@ import {
   limit,
   onSnapshot,
 } from 'firebase/firestore'
-import { db } from './firebase'
+import { auth, db } from './firebase'
+import { APPROVAL_STATUS } from '../utils/constants'
 
 const EVENTS_COLLECTION = 'events'
 const REGISTRATIONS_COLLECTION = 'registrations'
 
 // Events
-export const fetchEvents = async () => {
+export const fetchApprovedEvents = async () => {
   try {
-    const q = query(collection(db, EVENTS_COLLECTION), orderBy('createdAt', 'desc'))
+    const q = query(
+      collection(db, EVENTS_COLLECTION),
+      where('approvalStatus', '==', APPROVAL_STATUS.APPROVED),
+      orderBy('createdAt', 'desc')
+    )
     const snapshot = await getDocs(q)
     return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
   } catch (error) {
     // Fallback if index isn't ready
     if (error.code === 'failed-precondition') {
-      console.warn('Index missing — fetching events without order.')
-      const snapshot = await getDocs(collection(db, EVENTS_COLLECTION))
+      console.warn('Index missing — fetching approved events without order.')
+      const q = query(
+        collection(db, EVENTS_COLLECTION),
+        where('approvalStatus', '==', APPROVAL_STATUS.APPROVED)
+      )
+      const snapshot = await getDocs(q)
       return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
     }
     throw error
   }
 }
+
+// Backward-compatible alias
+export const fetchEvents = fetchApprovedEvents
 
 export const fetchEventById = async (id) => {
   const docRef = doc(db, EVENTS_COLLECTION, id)
@@ -47,10 +59,108 @@ export const fetchEventById = async (id) => {
 export const createEvent = async (eventData) => {
   const docRef = await addDoc(collection(db, EVENTS_COLLECTION), {
     ...eventData,
+    approvalStatus: eventData.approvalStatus || APPROVAL_STATUS.PENDING,
+    reviewedBy: null,
+    reviewedAt: null,
+    rejectionReason: null,
+    submittedAt: serverTimestamp(),
     createdAt: serverTimestamp(),
     registeredCount: 0,
   })
   return docRef.id
+}
+
+export const fetchMyProposals = async (uid) => {
+  if (!uid) return []
+
+  try {
+    const q = query(
+      collection(db, EVENTS_COLLECTION),
+      where('createdBy', '==', uid),
+      orderBy('createdAt', 'desc')
+    )
+    const snapshot = await getDocs(q)
+    if (!snapshot.empty) {
+      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    }
+
+    const legacyQ = query(
+      collection(db, EVENTS_COLLECTION),
+      where('organizerId', '==', uid)
+    )
+    const legacySnapshot = await getDocs(legacyQ)
+    return legacySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+  } catch (error) {
+    if (error.code === 'failed-precondition') {
+      const q = query(
+        collection(db, EVENTS_COLLECTION),
+        where('createdBy', '==', uid)
+      )
+      const snapshot = await getDocs(q)
+      if (!snapshot.empty) {
+        return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+      }
+
+      const legacyQ = query(
+        collection(db, EVENTS_COLLECTION),
+        where('organizerId', '==', uid)
+      )
+      const legacySnapshot = await getDocs(legacyQ)
+      return legacySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    }
+    throw error
+  }
+}
+
+export const fetchPendingEventsForAdmin = async () => {
+  try {
+    const q = query(
+      collection(db, EVENTS_COLLECTION),
+      where('approvalStatus', '==', APPROVAL_STATUS.PENDING),
+      orderBy('createdAt', 'desc')
+    )
+    const snapshot = await getDocs(q)
+    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+  } catch (error) {
+    if (error.code === 'failed-precondition') {
+      const q = query(
+        collection(db, EVENTS_COLLECTION),
+        where('approvalStatus', '==', APPROVAL_STATUS.PENDING)
+      )
+      const snapshot = await getDocs(q)
+      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    }
+    throw error
+  }
+}
+
+export const reviewEventProposal = async ({
+  eventId,
+  nextStatus,
+  reviewerUid,
+  rejectionReason,
+}) => {
+  const docRef = doc(db, EVENTS_COLLECTION, eventId)
+  await updateDoc(docRef, {
+    approvalStatus: nextStatus,
+    reviewedBy: reviewerUid || null,
+    reviewedAt: serverTimestamp(),
+    rejectionReason:
+      nextStatus === APPROVAL_STATUS.REJECTED
+        ? rejectionReason || 'No reason provided'
+        : null,
+  })
+}
+
+export const resubmitEventProposal = async (eventId) => {
+  const docRef = doc(db, EVENTS_COLLECTION, eventId)
+  await updateDoc(docRef, {
+    approvalStatus: APPROVAL_STATUS.PENDING,
+    resubmittedAt: serverTimestamp(),
+    reviewedBy: null,
+    reviewedAt: null,
+    rejectionReason: null,
+  })
 }
 
 export const updateEvent = async (id, updates) => {
@@ -63,13 +173,28 @@ export const deleteEvent = async (id) => {
 }
 
 // Registrations
-export const registerForEvent = async (eventId, userData) => {
-  const docRef = await addDoc(collection(db, REGISTRATIONS_COLLECTION), {
+export const registerForEvent = async (eventId, currentUser) => {
+  const authUser = auth.currentUser
+  if (!authUser?.uid) {
+    throw new Error('Not authenticated')
+  }
+
+  const registrationData = {
+    uid: authUser.uid,
     eventId,
-    ...userData,
-    registeredAt: serverTimestamp(),
     attended: false,
-  })
+    registeredAt: new Date(),
+  }
+
+  if (authUser.displayName || currentUser?.displayName) {
+    registrationData.displayName = authUser.displayName || currentUser.displayName
+  }
+
+  if (authUser.email || currentUser?.email) {
+    registrationData.email = authUser.email || currentUser.email
+  }
+
+  const docRef = await addDoc(collection(db, REGISTRATIONS_COLLECTION), registrationData)
   return docRef.id
 }
 
@@ -119,6 +244,22 @@ export const subscribeUserAttendance = (eventId, userId, onChange, onError) => {
       if (typeof onError === 'function') onError(error)
     }
   )
+}
+
+export const fetchUserEventRegistration = async (eventId, userId) => {
+  try {
+    const q = query(
+      collection(db, REGISTRATIONS_COLLECTION),
+      where("eventId", "==", eventId),
+      where("uid", "==", userId),
+      limit(1)
+    )
+    const snapshot = await getDocs(q)
+    if (snapshot.empty) return null
+    return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() }
+  } catch (error) {
+    return null
+  }
 }
 
 export const fetchRegistrations = async (eventId) => {

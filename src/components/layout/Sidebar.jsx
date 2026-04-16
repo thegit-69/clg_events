@@ -7,6 +7,7 @@ import {
   IoHomeOutline,
 } from 'react-icons/io5'
 import { HiOutlineAcademicCap } from 'react-icons/hi2'
+import useAuthStore from '../../store/authStore'
 
 const sidebarLinks = [
   { label: 'Overview', path: '/dashboard', icon: <IoGridOutline />, end: true },
@@ -16,6 +17,8 @@ const sidebarLinks = [
 ]
 
 export default function Sidebar({ isOpen, onClose }) {
+  const { isSuperAdmin } = useAuthStore()
+
   return (
     <>
       {/* Mobile overlay */}
@@ -81,6 +84,23 @@ export default function Sidebar({ isOpen, onClose }) {
                 </NavLink>
               </li>
             ))}
+            {isSuperAdmin && (
+              <li>
+                <NavLink
+                  to="/dashboard/admin/review"
+                  onClick={onClose}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors duration-200 ${isActive
+                      ? 'bg-primary-500 text-white'
+                      : 'text-dark-400 hover:text-white hover:bg-dark-800'
+                    }`
+                  }
+                >
+                  <span className="text-lg"><IoNotificationsOutline /></span>
+                  Admin Review
+                </NavLink>
+              </li>
+            )}
           </ul>
         </nav>
 

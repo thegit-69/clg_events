@@ -5,6 +5,7 @@ import {
   onAuthStateChanged,
 } from 'firebase/auth'
 import { auth } from './firebase'
+import { SUPER_ADMIN_EMAIL } from '../utils/constants'
 
 const googleProvider = new GoogleAuthProvider()
 
@@ -29,4 +30,11 @@ export const logOut = async () => {
 
 export const onAuthChange = (callback) => {
   return onAuthStateChanged(auth, callback)
+}
+
+export const getUserRole = (email) => {
+  if (!email) return 'organizer'
+  return email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
+    ? 'super-admin'
+    : 'organizer'
 }

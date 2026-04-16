@@ -1,10 +1,17 @@
 import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { IoMenuOutline } from 'react-icons/io5'
 import Sidebar from './Sidebar'
+import useAuthStore from '../../store/authStore'
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const location = useLocation()
+  const { isSuperAdmin } = useAuthStore()
+
+  if (location.pathname.startsWith('/dashboard/admin') && !isSuperAdmin) {
+    return <Navigate to="/dashboard" replace />
+  }
 
   return (
     <div className="flex min-h-screen">

@@ -9,20 +9,25 @@ import {
   IoSearchOutline,
 } from 'react-icons/io5'
 import Button from '../components/ui/Button'
-import useEventStore from '../store/eventStore'
+import useAuthStore from '../store/authStore'
 import {
+  fetchEventById,
   fetchRegistrations,
   markAttendance as markAttendanceInFirestore,
 } from '../services/eventService'
+import { APPROVAL_STATUS } from '../utils/constants'
 import toast from 'react-hot-toast'
 
 const SCAN_COOLDOWN_MS = 3000
 
 export default function Attendance() {
   const { id } = useParams()
-  const { events } = useEventStore()
+  const { user, isSuperAdmin } = useAuthStore()
+  const [event, setEvent] = useState(null)
   const [attendees, setAttendees] = useState([])
   const [loading, setLoading] = useState(true)
+  const [canManageAttendance, setCanManageAttendance] = useState(false)
+  const [eventError, setEventError] = useState('')
   const [scanning, setScanning] = useState(false)
   const [manualId, setManualId] = useState('')
   const [lastScanned, setLastScanned] = useState(null)
@@ -33,18 +38,40 @@ export default function Attendance() {
   const lastScannedCodeRef = useRef(null)
   const lastScannedTimeRef = useRef(0)
 
-  const event = events.find((e) => e.id === id)
   const attendedCount = attendees.filter((a) => a.attended).length
 
   useEffect(() => {
     attendeesRef.current = attendees
   }, [attendees])
 
-  // Load registrations from Firestore
+  // Resolve event and load registrations only for authorized organizer/admin
   useEffect(() => {
-    const loadRegistrations = async () => {
+    const loadAttendanceData = async () => {
       setLoading(true)
       try {
+        const eventDoc = await fetchEventById(id)
+        if (!eventDoc) {
+          setEventError('Event not found.')
+          setCanManageAttendance(false)
+          return
+        }
+
+        setEvent(eventDoc)
+
+        const ownerUid = eventDoc.createdBy || eventDoc.organizerId
+        const isOwner = ownerUid === user?.uid
+        const isApproved = eventDoc.approvalStatus === APPROVAL_STATUS.APPROVED
+        const canManage = (isOwner || isSuperAdmin) && isApproved
+
+        if (!canManage) {
+          setCanManageAttendance(false)
+          setEventError('Only the approved event organizer can mark attendance.')
+          return
+        }
+
+        setCanManageAttendance(true)
+        setEventError('')
+
         const regs = await fetchRegistrations(id)
         const mapped = regs.map((r) => ({
           id: r.id,
@@ -64,11 +91,16 @@ export default function Attendance() {
         setLoading(false)
       }
     }
-    loadRegistrations()
-  }, [id])
+    loadAttendanceData()
+  }, [id, user?.uid, isSuperAdmin])
 
   // Mark a registration as attended — uses functional state to avoid stale closures
   const handleMarkAttendance = useCallback(async (registrationId) => {
+    if (!canManageAttendance) {
+      toast.error('You are not allowed to mark attendance for this event')
+      return
+    }
+
     const attendee = attendeesRef.current.find((a) => a.id === registrationId)
 
     if (!attendee) {
@@ -94,7 +126,7 @@ export default function Attendance() {
       console.error('Mark attendance error:', error)
       toast.error('Failed to mark attendance')
     }
-  }, [])
+  }, [canManageAttendance])
 
   // Ref-based callback so the scanner always invokes the latest version
   const handleMarkAttendanceRef = useRef(handleMarkAttendance)
@@ -121,6 +153,11 @@ export default function Attendance() {
 
   // Start camera scanner — dynamically imports html5-qrcode to prevent page crash
   const startScanner = async () => {
+    if (!canManageAttendance) {
+      toast.error('Attendance access denied')
+      return
+    }
+
     if (!scannerRef.current || scanning || scannerStartingRef.current) return
     scannerStartingRef.current = true
 
@@ -223,6 +260,11 @@ export default function Attendance() {
 
   // Manual entry handler
   const handleManualEntry = () => {
+    if (!canManageAttendance) {
+      toast.error('Attendance access denied')
+      return
+    }
+
     const trimmed = manualId.trim()
     if (!trimmed) return
 
@@ -252,177 +294,186 @@ export default function Attendance() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Scanner Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-2xl border border-dark-200 p-6"
-        >
-          <h3 className="text-lg font-bold text-dark-900 mb-2">Scan QR Code</h3>
-          <p className="text-sm text-dark-500 mb-6">
-            Point the camera at a participant's QR code to mark attendance
-          </p>
+      {!loading && !canManageAttendance && (
+        <div className="bg-white rounded-2xl border border-dark-200 p-8 text-center">
+          <p className="text-dark-600">{eventError || 'Attendance access denied.'}</p>
+        </div>
+      )}
 
-          {/* Camera viewport */}
-          <div
-            ref={scannerRef}
-            className="relative w-full max-w-sm mx-auto mb-6"
-            style={{ minHeight: '280px' }}
+      {canManageAttendance && (
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Scanner Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-2xl border border-dark-200 p-6"
           >
-            <div id="qr-reader" className="w-full rounded-xl overflow-hidden" />
+            <h3 className="text-lg font-bold text-dark-900 mb-2">Scan QR Code</h3>
+            <p className="text-sm text-dark-500 mb-6">
+              Point the camera at a participant's QR code to mark attendance
+            </p>
 
-            {!scanning && (
-              <div className="absolute inset-0 w-full h-full bg-dark-100 rounded-xl flex items-center justify-center border-2 border-dashed border-dark-300">
-                <div className="text-center">
-                  <IoVideocamOutline className="text-4xl text-dark-400 mx-auto mb-2" />
-                  <p className="text-sm text-dark-400">Camera is off</p>
-                  <p className="text-xs text-dark-300 mt-1">
-                    Click "Start Scanner" to begin
-                  </p>
+            {/* Camera viewport */}
+            <div
+              ref={scannerRef}
+              className="relative w-full max-w-sm mx-auto mb-6"
+              style={{ minHeight: '280px' }}
+            >
+              <div id="qr-reader" className="w-full rounded-xl overflow-hidden" />
+
+              {!scanning && (
+                <div className="absolute inset-0 w-full h-full bg-dark-100 rounded-xl flex items-center justify-center border-2 border-dashed border-dark-300">
+                  <div className="text-center">
+                    <IoVideocamOutline className="text-4xl text-dark-400 mx-auto mb-2" />
+                    <p className="text-sm text-dark-400">Camera is off</p>
+                    <p className="text-xs text-dark-300 mt-1">
+                      Click "Start Scanner" to begin
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* Scanner controls */}
-          <div className="flex justify-center gap-3 mb-6">
-            {!scanning ? (
-              <Button
-                icon={<IoVideocamOutline />}
-                onClick={startScanner}
-              >
-                Start Scanner
-              </Button>
-            ) : (
-              <Button
-                variant="danger"
-                icon={<IoVideocamOffOutline />}
-                onClick={stopScanner}
-              >
-                Stop Scanner
-              </Button>
-            )}
-          </div>
-
-          {/* Last scanned feedback */}
-          {lastScanned && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-6 text-center">
-              <IoCheckmarkCircle className="text-emerald-500 text-2xl mx-auto mb-1" />
-              <p className="text-sm font-semibold text-emerald-700">
-                {lastScanned.name}
-              </p>
-              <p className="text-xs text-emerald-600">
-                Checked in at {lastScanned.time}
-              </p>
+              )}
             </div>
-          )}
 
-          {/* Manual entry */}
-          <div className="border-t border-dark-100 pt-6">
-            <p className="text-sm font-semibold text-dark-700 mb-3">
-              Manual Check-in
-            </p>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <IoSearchOutline className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-400" />
-                <input
-                  type="text"
-                  value={manualId}
-                  onChange={(e) => setManualId(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleManualEntry()}
-                  placeholder="Registration ID or email"
-                  className="w-full pl-10 pr-4 py-3 border-2 border-dark-200 rounded-xl text-sm
-                             focus:outline-none focus:border-primary-500 transition-colors"
-                />
-              </div>
-              <Button size="md" onClick={handleManualEntry}>
-                Mark
-              </Button>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Attendee List */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white rounded-2xl border border-dark-200 overflow-hidden"
-        >
-          <div className="p-6 border-b border-dark-100">
-            <h3 className="text-lg font-bold text-dark-900">Attendees</h3>
-            <p className="text-sm text-dark-400">
-              {attendedCount} of {attendees.length} checked in
-            </p>
-            {/* Progress bar */}
-            {attendees.length > 0 && (
-              <div className="w-full bg-dark-100 rounded-full h-2 mt-3">
-                <div
-                  className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${(attendedCount / attendees.length) * 100}%` }}
-                />
-              </div>
-            )}
-          </div>
-
-          {loading ? (
-            <div className="p-10 text-center">
-              <p className="text-dark-400 text-sm">Loading attendees...</p>
-            </div>
-          ) : attendees.length === 0 ? (
-            <div className="p-10 text-center">
-              <p className="text-dark-400 text-sm">No registrations yet</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-dark-100 max-h-[500px] overflow-y-auto">
-              {attendees.map((attendee) => (
-                <div
-                  key={attendee.id}
-                  className="px-6 py-4 flex items-center justify-between"
+            {/* Scanner controls */}
+            <div className="flex justify-center gap-3 mb-6">
+              {!scanning ? (
+                <Button
+                  icon={<IoVideocamOutline />}
+                  onClick={startScanner}
                 >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold
+                  Start Scanner
+                </Button>
+              ) : (
+                <Button
+                  variant="danger"
+                  icon={<IoVideocamOffOutline />}
+                  onClick={stopScanner}
+                >
+                  Stop Scanner
+                </Button>
+              )}
+            </div>
+
+            {/* Last scanned feedback */}
+            {lastScanned && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-6 text-center">
+                <IoCheckmarkCircle className="text-emerald-500 text-2xl mx-auto mb-1" />
+                <p className="text-sm font-semibold text-emerald-700">
+                  {lastScanned.name}
+                </p>
+                <p className="text-xs text-emerald-600">
+                  Checked in at {lastScanned.time}
+                </p>
+              </div>
+            )}
+
+            {/* Manual entry */}
+            <div className="border-t border-dark-100 pt-6">
+              <p className="text-sm font-semibold text-dark-700 mb-3">
+                Manual Check-in
+              </p>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <IoSearchOutline className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-400" />
+                  <input
+                    type="text"
+                    value={manualId}
+                    onChange={(e) => setManualId(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleManualEntry()}
+                    placeholder="Registration ID or email"
+                    className="w-full pl-10 pr-4 py-3 border-2 border-dark-200 rounded-xl text-sm
+                             focus:outline-none focus:border-primary-500 transition-colors"
+                  />
+                </div>
+                <Button size="md" onClick={handleManualEntry}>
+                  Mark
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Attendee List */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-white rounded-2xl border border-dark-200 overflow-hidden"
+          >
+            <div className="p-6 border-b border-dark-100">
+              <h3 className="text-lg font-bold text-dark-900">Attendees</h3>
+              <p className="text-sm text-dark-400">
+                {attendedCount} of {attendees.length} checked in
+              </p>
+              {/* Progress bar */}
+              {attendees.length > 0 && (
+                <div className="w-full bg-dark-100 rounded-full h-2 mt-3">
+                  <div
+                    className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${(attendedCount / attendees.length) * 100}%` }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {loading ? (
+              <div className="p-10 text-center">
+                <p className="text-dark-400 text-sm">Loading attendees...</p>
+              </div>
+            ) : attendees.length === 0 ? (
+              <div className="p-10 text-center">
+                <p className="text-dark-400 text-sm">No registrations yet</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-dark-100 max-h-[500px] overflow-y-auto">
+                {attendees.map((attendee) => (
+                  <div
+                    key={attendee.id}
+                    className="px-6 py-4 flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold
                         ${attendee.attended
-                          ? 'bg-emerald-100 text-emerald-600'
-                          : 'bg-dark-100 text-dark-400'
-                        }`}
-                    >
+                            ? 'bg-emerald-100 text-emerald-600'
+                            : 'bg-dark-100 text-dark-400'
+                          }`}
+                      >
+                        {attendee.attended ? (
+                          <IoCheckmarkCircle />
+                        ) : (
+                          attendee.name.charAt(0)
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-dark-900">
+                          {attendee.name}
+                        </p>
+                        <p className="text-xs text-dark-400">{attendee.email}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
                       {attendee.attended ? (
-                        <IoCheckmarkCircle />
+                        <span className="text-xs text-emerald-600 font-medium">
+                          ✓ {attendee.time}
+                        </span>
                       ) : (
-                        attendee.name.charAt(0)
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleMarkAttendance(attendee.id)}
+                        >
+                          Mark
+                        </Button>
                       )}
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-dark-900">
-                        {attendee.name}
-                      </p>
-                      <p className="text-xs text-dark-400">{attendee.email}</p>
-                    </div>
                   </div>
-                  <div className="text-right">
-                    {attendee.attended ? (
-                      <span className="text-xs text-emerald-600 font-medium">
-                        ✓ {attendee.time}
-                      </span>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleMarkAttendance(attendee.id)}
-                      >
-                        Mark
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </motion.div>
-      </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        </div>
+      )}
     </div>
   )
 }

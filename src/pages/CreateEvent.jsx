@@ -3,15 +3,19 @@ import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { motion } from 'framer-motion'
 import Button from '../components/ui/Button'
-import useEventStore from '../store/eventStore'
 import useAuthStore from '../store/authStore'
-import { EVENT_TYPES, EVENT_MODE, THEME_TAGS } from '../utils/constants'
+import {
+  APPROVAL_STATUS,
+  EVENT_STATUS,
+  EVENT_MODE,
+  EVENT_TYPES,
+  THEME_TAGS,
+} from '../utils/constants'
 import { createEvent as createEventInFirestore } from '../services/eventService'
 import toast from 'react-hot-toast'
 
 export default function CreateEvent() {
   const navigate = useNavigate()
-  const { addEvent } = useEventStore()
   const { user } = useAuthStore()
   const [selectedTags, setSelectedTags] = useState([])
   const [submitting, setSubmitting] = useState(false)
@@ -34,18 +38,23 @@ export default function CreateEvent() {
       const eventData = {
         ...data,
         tags: selectedTags,
-        status: 'UPCOMING',
+        status: EVENT_STATUS.UPCOMING,
+        approvalStatus: APPROVAL_STATUS.PENDING,
+        createdBy: user?.uid || 'anonymous',
         registeredCount: 0,
         participantAvatars: [],
         banner: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&h=400&fit=crop',
         organizer: user?.displayName || 'My Organization',
         organizerId: user?.uid || 'anonymous',
+        rejectionReason: null,
+        reviewedBy: null,
+        reviewedAt: null,
+        mode: data.mode || EVENT_MODE.OFFLINE,
         maxParticipants: data.maxParticipants || 100,
       }
 
-      const id = await createEventInFirestore(eventData)
-      addEvent({ id, ...eventData, createdAt: new Date().toISOString() })
-      toast.success('Event created successfully!')
+      await createEventInFirestore(eventData)
+      toast.success('Event submitted for approval!')
       navigate('/dashboard/events')
     } catch (error) {
       console.error('Create event error:', error)

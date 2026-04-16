@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { IoArrowForward } from 'react-icons/io5'
-import { Link } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import SearchBar from '../components/ui/SearchBar'
 import TabBar from '../components/ui/TabBar'
 import EventCard from '../components/ui/EventCard'
@@ -15,6 +15,7 @@ const TABS = [
 ]
 
 export default function Home() {
+  const navigate = useNavigate()
   const { filteredEvents, searchQuery, setSearchQuery, activeFilter, setActiveFilter } =
     useEventStore()
 
@@ -39,7 +40,8 @@ export default function Home() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="grid grid-cols-1 lg:grid-cols-2 gap-0 bg-white border border-dark-200 rounded-2xl overflow-hidden"
+            onClick={() => navigate(`/events/${featured.id}`)}
+            className="grid grid-cols-1 lg:grid-cols-2 gap-0 bg-white border border-dark-200 rounded-2xl overflow-hidden cursor-pointer hover:shadow-lg transition-shadow"
           >
             {/* Banner */}
             <div className="relative h-64 lg:h-auto">
@@ -62,6 +64,7 @@ export default function Home() {
                   <Link
                     key={tag}
                     to={`/events?tag=${tag}`}
+                    onClick={(e) => e.stopPropagation()}
                     className="block px-4 py-3 border border-dark-200 rounded-lg text-dark-700
                                font-medium text-center hover:bg-dark-50 transition-colors"
                   >
