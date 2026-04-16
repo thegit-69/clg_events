@@ -18,6 +18,19 @@ export default function Navbar() {
       <nav className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-dark-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-16">
+            {/* Mobile menu button */}
+            <button
+              className="md:hidden text-dark-600"
+              onClick={() => setMobileMenu(!mobileMenu)}
+              aria-label={mobileMenu ? 'Close menu' : 'Open menu'}
+            >
+              {mobileMenu ? (
+                <IoCloseOutline size={24} />
+              ) : (
+                <IoMenuOutline size={24} />
+              )}
+            </button>
+
             {/* Logo */}
             <Link to="/" className="flex items-center gap-2">
               <div className="w-8 h-8 bg-primary-500 rounded-lg flex items-center justify-center">
@@ -93,17 +106,22 @@ export default function Navbar() {
               )}
             </div>
 
-            {/* Mobile menu button */}
-            <button
-              className="md:hidden text-dark-600"
-              onClick={() => setMobileMenu(!mobileMenu)}
-            >
-              {mobileMenu ? (
-                <IoCloseOutline size={24} />
-              ) : (
-                <IoMenuOutline size={24} />
-              )}
-            </button>
+            {/* Mobile Auth */}
+            {!isAuthenticated ? (
+              <Button
+                className="md:hidden"
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  setAuthModal(true)
+                  setMobileMenu(false)
+                }}
+              >
+                Sign in
+              </Button>
+            ) : (
+              <div className="md:hidden w-6" />
+            )}
           </div>
 
           {/* Mobile Menu */}
@@ -146,17 +164,7 @@ export default function Navbar() {
                       Sign out
                     </button>
                   </>
-                ) : (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setAuthModal(true)
-                      setMobileMenu(false)
-                    }}
-                  >
-                    Join CampusEvents
-                  </Button>
-                )}
+                ) : null}
               </div>
             </div>
           )}

@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react'
 import { IoDownloadOutline, IoLockClosed, IoPrintOutline } from 'react-icons/io5'
 import html2pdf from 'html2pdf.js'
 import Button from './Button'
-import { checkUserAttendance } from '../../services/eventService'
+import { subscribeUserAttendance } from '../../services/eventService'
 
 export default function CertificateDownload({ studentName, eventName, userId, eventId, eventDate }) {
     const certificateRef = useRef(null)
@@ -11,21 +11,30 @@ export default function CertificateDownload({ studentName, eventName, userId, ev
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        const checkStatus = async () => {
-            if (!userId || !eventId) {
-                setLoading(false)
-                return
-            }
-            try {
-                const hasAttended = await checkUserAttendance(eventId, userId)
-                setAttended(hasAttended)
-            } catch (error) {
-                console.error('Failed to verify attendance:', error)
-            } finally {
-                setLoading(false)
-            }
+        if (!userId || !eventId) {
+            setAttended(false)
+            setLoading(false)
+            return () => { }
         }
-        checkStatus()
+
+        setLoading(true)
+
+        const unsubscribe = subscribeUserAttendance(
+            eventId,
+            userId,
+            (hasAttended) => {
+                setAttended(hasAttended)
+                setLoading(false)
+            },
+            (error) => {
+                console.error('Failed to verify attendance:', error)
+                setLoading(false)
+            }
+        )
+
+        return () => {
+            unsubscribe()
+        }
     }, [userId, eventId])
 
     const handleDownload = async () => {
@@ -111,93 +120,34 @@ export default function CertificateDownload({ studentName, eventName, userId, ev
             <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
                 <div
                     ref={certificateRef}
-                    className="w-[1123px] h-[794px] bg-white p-12 text-dark-900 relative"
+                    className="w-[1123px] h-[794px] bg-white relative"
                     style={{ fontFamily: "'Times New Roman', serif" }}
                 >
-                    {/* Decorative Border */}
-                    <div className="h-full w-full border-8 border-double border-primary-800 p-8 relative">
-                        {/* Corner Ornaments */}
-                        <div className="absolute top-2 left-2 w-16 h-16 border-t-4 border-l-4 border-primary-600"></div>
-                        <div className="absolute top-2 right-2 w-16 h-16 border-t-4 border-r-4 border-primary-600"></div>
-                        <div className="absolute bottom-2 left-2 w-16 h-16 border-b-4 border-l-4 border-primary-600"></div>
-                        <div className="absolute bottom-2 right-2 w-16 h-16 border-b-4 border-r-4 border-primary-600"></div>
+                    <img
+                        src="/certificate-bg.png"
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-cover z-0"
+                    />
 
-                        <div className="h-full flex flex-col items-center justify-between text-center pt-12 pb-24">
+                    {/* Participant Name Overlay */}
+                    <div className="absolute top-[50%] left-0 w-full text-center z-10">
+                        <span className="text-5xl font-bold text-dark-900 font-serif italic tracking-wide">
+                            {studentName || 'Student Name'}
+                        </span>
+                    </div>
 
-                            {/* Header */}
-                            <div className="space-y-4">
-                                <div className="text-primary-800 opacity-80 uppercase tracking-[0.2em] font-bold">
-                                    College Event Management System
-                                </div>
-                                <h1 className="text-6xl font-bold text-dark-900 uppercase tracking-wider text-primary-900" style={{ fontFamily: 'serif' }}>
-                                    Certificate
-                                </h1>
-                                <h2 className="text-2xl italic text-dark-600 font-serif">
-                                    of Participation
-                                </h2>
-                            </div>
+                    {/* Event Name Overlay */}
+                    <div className="absolute top-[62%] left-0 w-full text-center z-10">
+                        <span className="text-4xl font-bold text-dark-800 tracking-wide">
+                            {eventName || 'Event Name'}
+                        </span>
+                    </div>
 
-                            {/* Main Content */}
-                            <div className="space-y-6 my-8 w-full max-w-4xl">
-                                <p className="text-xl text-dark-600">This is to certify that</p>
-
-                                <div className="text-5xl font-bold text-primary-700 py-4 border-b-2 border-dark-200 mx-auto w-3/4 font-serif italic">
-                                    {studentName || 'Student Name'}
-                                </div>
-
-                                <p className="text-xl text-dark-600 mt-6">
-                                    has successfully participated in the event
-                                </p>
-
-                                <div className="text-3xl font-bold text-dark-800 mt-2">
-                                    {eventName || 'Event Name'}
-                                </div>
-
-                                <p className="text-lg text-dark-500 mt-4">
-                                    Held on {eventDate ? new Date(eventDate).toLocaleDateString(undefined, {
-                                        weekday: 'long',
-                                        year: 'numeric',
-                                        month: 'long',
-                                        day: 'numeric'
-                                    }) : new Date().toLocaleDateString(undefined, {
-                                        weekday: 'long',
-                                        year: 'numeric',
-                                        month: 'long',
-                                        day: 'numeric'
-                                    })}
-                                </p>
-                            </div>
-
-                            {/* Footer / Signatures */}
-                            <div className="flex justify-between w-full px-20 mt-12">
-                                <div className="text-center">
-                                    <div className="w-64 border-b border-dark-800 mb-2"></div>
-                                    <p className="font-bold text-dark-800">Event Coordinator</p>
-                                    <p className="text-sm text-dark-500">Signature</p>
-                                </div>
-
-                                <div className="flex flex-col items-center justify-center">
-                                    {/* Optional Seal / Badge */}
-                                    <div className="w-24 h-24 rounded-full border-4 border-primary-200 flex items-center justify-center bg-primary-50 text-primary-800 font-bold shadow-inner">
-                                        SEAL
-                                    </div>
-                                </div>
-
-                                <div className="text-center">
-                                    <div className="w-64 border-b border-dark-800 mb-2"></div>
-                                    <p className="font-bold text-dark-800">Principal / Authority</p>
-                                    <p className="text-sm text-dark-500">Signature</p>
-                                </div>
-                            </div>
-
-                            {/* ID or Ref Code */}
-                            <div className="absolute bottom-8 left-0 w-full text-center">
-                                <p className="text-xs text-dark-300 font-mono">
-                                    Certificate ID: {Math.random().toString(36).substr(2, 9).toUpperCase()}
-                                </p>
-                            </div>
-
-                        </div>
+                    {/* ID or Ref Code Overlay */}
+                    <div className="absolute bottom-[7%] left-0 w-full text-center z-10">
+                        <p className="text-sm text-dark-800 opacity-70 font-mono">
+                            Certificate ID: {Math.random().toString(36).substr(2, 9).toUpperCase()}
+                        </p>
                     </div>
                 </div>
             </div>

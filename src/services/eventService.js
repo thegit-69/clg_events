@@ -11,6 +11,7 @@ import {
   where,
   serverTimestamp,
   limit,
+  onSnapshot,
 } from 'firebase/firestore'
 import { db } from './firebase'
 
@@ -87,6 +88,37 @@ export const checkUserAttendance = async (eventId, userId) => {
     console.error('Error checking attendance:', error)
     return false
   }
+}
+
+export const subscribeUserAttendance = (eventId, userId, onChange, onError) => {
+  if (!eventId || !userId) {
+    if (typeof onChange === 'function') onChange(false)
+    return () => { }
+  }
+
+  const q = query(
+    collection(db, REGISTRATIONS_COLLECTION),
+    where('eventId', '==', eventId),
+    where('uid', '==', userId),
+    limit(1)
+  )
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      if (snapshot.empty) {
+        if (typeof onChange === 'function') onChange(false)
+        return
+      }
+
+      const hasAttended = snapshot.docs[0].data().attended || false
+      if (typeof onChange === 'function') onChange(hasAttended)
+    },
+    (error) => {
+      console.error('Error listening for attendance updates:', error)
+      if (typeof onError === 'function') onError(error)
+    }
+  )
 }
 
 export const fetchRegistrations = async (eventId) => {
