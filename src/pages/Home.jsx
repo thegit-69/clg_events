@@ -52,11 +52,11 @@ export default function Home() {
               />
             </div>
             {/* Details */}
-            <div className="p-8 flex flex-col justify-center">
-              <h2 className="text-3xl font-bold text-dark-900 mb-3">
+            <div className="p-6 md:p-8 flex flex-col justify-center">
+              <h2 className="text-2xl md:text-3xl font-bold text-dark-900 mb-3">
                 {featured.title}
               </h2>
-              <p className="text-dark-500 mb-6 leading-relaxed">
+              <p className="text-dark-500 mb-6 leading-relaxed line-clamp-3 md:line-clamp-none">
                 {featured.description}
               </p>
               <div className="space-y-2">

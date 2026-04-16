@@ -16,7 +16,7 @@ export default function Navbar() {
   return (
     <>
       <nav className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-dark-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="px-4 sm:px-6">
           <div className="flex items-center justify-between h-16">
             {/* Mobile menu button */}
             <button
@@ -72,22 +72,30 @@ export default function Navbar() {
                       Dashboard
                     </Button>
                   </Link>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3 ml-2 pl-4 border-l border-dark-200">
+                    <div className="flex flex-col items-end">
+                      <span className="text-sm font-semibold text-dark-900 leading-tight">
+                        {user?.displayName || 'User'}
+                      </span>
+                      <span className="text-xs text-dark-500 max-w-[120px] truncate leading-tight">
+                        {user?.email}
+                      </span>
+                    </div>
                     {user?.photoURL ? (
                       <img
                         src={user.photoURL}
                         alt={user.displayName}
-                        className="w-8 h-8 rounded-full object-cover"
+                        className="w-9 h-9 rounded-full object-cover border border-primary-200"
                         referrerPolicy="no-referrer"
                       />
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-sm">
+                      <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-sm border border-primary-200">
                         {user?.displayName?.charAt(0) || 'U'}
                       </div>
                     )}
                     <button
                       onClick={logout}
-                      className="text-sm text-dark-500 hover:text-dark-700"
+                      className="text-sm font-medium text-dark-500 hover:text-red-600 transition-colors ml-2"
                     >
                       Sign out
                     </button>
@@ -106,7 +114,7 @@ export default function Navbar() {
               )}
             </div>
 
-            {/* Mobile Auth */}
+            {/* Mobile Auth profile pic */}
             {!isAuthenticated ? (
               <Button
                 className="md:hidden"
@@ -120,51 +128,89 @@ export default function Navbar() {
                 Sign in
               </Button>
             ) : (
-              <div className="md:hidden w-6" />
+              <div className="md:hidden flex items-center gap-2 cursor-pointer transition-opacity hover:opacity-80" onClick={() => setMobileMenu(!mobileMenu)}>
+                {user?.photoURL ? (
+                  <img
+                    src={user.photoURL}
+                    alt={user.displayName}
+                    className="w-8 h-8 rounded-full object-cover border border-primary-200"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-sm">
+                    {user?.displayName?.charAt(0) || 'U'}
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
           {/* Mobile Menu */}
           {mobileMenu && (
-            <div className="md:hidden py-4 border-t border-dark-100">
-              <div className="flex flex-col gap-3">
+            <div className="md:hidden py-4 border-t border-dark-100 animate-fade-in">
+              {/* User Info in Mobile Menu */}
+              {isAuthenticated && (
+                <div className="flex items-center gap-3 mb-6 p-3 bg-dark-50 rounded-xl">
+                  {user?.photoURL ? (
+                    <img
+                      src={user.photoURL}
+                      alt={user.displayName}
+                      className="w-12 h-12 rounded-full object-cover border-2 border-primary-200"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-bold text-lg">
+                      {user?.displayName?.charAt(0) || 'U'}
+                    </div>
+                  )}
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-dark-900">{user?.displayName || 'User'}</span>
+                    <span className="text-xs text-dark-500">{user?.email}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2">
                 {NAV_LINKS.map((link) => (
                   <Link
                     key={link.path}
                     to={link.path}
                     onClick={() => setMobileMenu(false)}
-                    className="text-sm font-medium text-dark-600 hover:text-dark-900 py-2"
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium text-dark-700 hover:bg-dark-50 hover:text-dark-900 transition-colors"
                   >
                     {link.label}
                   </Link>
                 ))}
-                {isAuthenticated ? (
+
+                {isAuthenticated && (
                   <>
+                    <div className="h-px bg-dark-100 my-2" />
                     <Link
                       to="/my-tickets"
                       onClick={() => setMobileMenu(false)}
-                      className="text-sm font-medium text-dark-600 hover:text-dark-900 py-2 flex items-center gap-2"
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium text-dark-700 hover:bg-dark-50 hover:text-dark-900 transition-colors"
                     >
-                      <IoTicketOutline /> My Tickets
+                      <IoTicketOutline size={20} /> My Tickets
                     </Link>
                     <Link
                       to="/dashboard"
                       onClick={() => setMobileMenu(false)}
-                      className="text-sm font-medium text-primary-500 py-2"
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium text-primary-600 hover:bg-primary-50 transition-colors"
                     >
-                      Dashboard
+                      <HiOutlineAcademicCap size={20} /> Dashboard
                     </Link>
+                    <div className="h-px bg-dark-100 my-2" />
                     <button
                       onClick={() => {
                         logout()
                         setMobileMenu(false)
                       }}
-                      className="text-sm text-dark-500 text-left py-2"
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium text-red-600 hover:bg-red-50 transition-colors w-full text-left"
                     >
                       Sign out
                     </button>
                   </>
-                ) : null}
+                )}
               </div>
             </div>
           )}

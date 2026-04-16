@@ -32,6 +32,26 @@ export default function CreateEvent() {
     )
   }
 
+  const getBannerForEventType = (type) => {
+    switch (type) {
+      case 'Hackathon':
+        return 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=800&h=400&fit=crop';
+      case 'Cultural':
+        return 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&h=400&fit=crop';
+      case 'Fest':
+        return 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=800&h=400&fit=crop';
+      case 'Sports':
+        return 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=800&h=400&fit=crop';
+      case 'Technical':
+        return 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&h=400&fit=crop';
+      case 'Workshop':
+      case 'Seminar':
+      case 'Conference':
+      default:
+        return 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&h=400&fit=crop';
+    }
+  }
+
   const onSubmit = async (data) => {
     setSubmitting(true)
     try {
@@ -43,7 +63,7 @@ export default function CreateEvent() {
         createdBy: user?.uid || 'anonymous',
         registeredCount: 0,
         participantAvatars: [],
-        banner: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&h=400&fit=crop',
+        banner: getBannerForEventType(data.type),
         organizer: user?.displayName || 'My Organization',
         organizerId: user?.uid || 'anonymous',
         rejectionReason: null,
