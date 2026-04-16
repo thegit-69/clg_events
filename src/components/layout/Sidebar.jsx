@@ -4,7 +4,6 @@ import {
   IoCalendarOutline,
   IoAddCircleOutline,
   IoNotificationsOutline,
-  IoSettingsOutline,
   IoHomeOutline,
 } from 'react-icons/io5'
 import { HiOutlineAcademicCap } from 'react-icons/hi2'
@@ -14,7 +13,6 @@ const sidebarLinks = [
   { label: 'My Events', path: '/dashboard/events', icon: <IoCalendarOutline /> },
   { label: 'Create Event', path: '/dashboard/create', icon: <IoAddCircleOutline /> },
   { label: 'Notifications', path: '/dashboard/notifications', icon: <IoNotificationsOutline /> },
-  { label: 'Settings', path: '/dashboard/settings', icon: <IoSettingsOutline /> },
 ]
 
 export default function Sidebar({ isOpen, onClose }) {
