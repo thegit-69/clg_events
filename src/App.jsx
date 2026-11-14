@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
+import { Analytics } from '@vercel/analytics/react'
 import Layout from './components/layout/Layout'
 import DashboardLayout from './components/layout/DashboardLayout'
 import Home from './pages/Home'
@@ -78,6 +79,7 @@ function App() {
           <Route path="admin/review" element={<AdminReview />} />
         </Route>
       </Routes>
+      <Analytics />
     </BrowserRouter>
   )
 }
